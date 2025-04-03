@@ -85,26 +85,30 @@ def format_worker_data(worker_data: Union[List, Dict]) -> List:
 async def write_to_sheet(worker_data: Union[List, Dict]):
     """Запись данных в существующую таблицу"""
     try:
-        print(f"Начинаем запись в таблицу. ID таблицы: {SPREADSHEET_ID}")
-        print(f"Используем файл учетных данных: {CREDENTIALS_FILE}")
+        print(f"[DEBUG] Начинаем запись в таблицу")
+        print(f"[DEBUG] ID таблицы: {SPREADSHEET_ID}")
+        print(f"[DEBUG] Файл учетных данных: {CREDENTIALS_FILE}")
+        print(f"[DEBUG] Тип входных данных: {type(worker_data)}")
         
         service = get_google_sheets_service()
-        print("Сервис Google Sheets успешно создан")
+        print("[DEBUG] Сервис Google Sheets успешно создан")
         
         sheets = service.spreadsheets()
-        print("Получаем текущие данные таблицы...")
+        print("[DEBUG] Получаем текущие данные таблицы...")
 
         # Получаем текущие данные таблицы
         result = sheets.values().get(
             spreadsheetId=SPREADSHEET_ID,
             range=RANGE_NAME
         ).execute()
+        print(f"[DEBUG] Результат получения данных: {result}")
         
         values = result.get('values', [])
-        print(f"Получено {len(values)} строк из таблицы")
+        print(f"[DEBUG] Получено {len(values)} строк из таблицы")
         
         # Если таблица пустая, добавляем заголовки
         if not values:
+            print("[DEBUG] Таблица пустая, добавляем заголовки")
             headers = [
                 ['Дата записи',
                  'ID', 'Имя работника', 'Адрес начала работы', 
@@ -119,15 +123,18 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
             ).execute()
 
         # Форматируем данные работников
+        print(f"[DEBUG] Форматируем данные работника: {worker_data}")
         if isinstance(worker_data, list) and all(hasattr(w, '__table__') for w in worker_data):
             # Если это список SQLAlchemy моделей
             row_data = [format_worker_data(worker) for worker in worker_data]
         else:
             # Если это одиночный объект
             row_data = [format_worker_data(worker_data)]
+        print(f"[DEBUG] Отформатированные данные: {row_data}")
 
         # Определяем следующую пустую строку
         next_row = len(values) + 1 if values else 2
+        print(f"[DEBUG] Следующая строка для записи: {next_row}")
         
         # Записываем данные
         result = sheets.values().update(
@@ -136,10 +143,11 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
             valueInputOption='RAW',
             body={'values': row_data}
         ).execute()
+        print(f"[DEBUG] Результат записи: {result}")
 
         # Формируем ссылку на таблицу
         sheet_url = f'https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'
-        print(f"Данные успешно записаны в таблицу. Ссылка: {sheet_url}")
+        print(f"[DEBUG] Данные успешно записаны в таблицу. Ссылка: {sheet_url}")
         return {
             'success': True,
             'url': sheet_url,
@@ -147,6 +155,10 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
         }
 
     except Exception as e:
+        print(f"[ERROR] Произошла ошибка при записи в таблицу: {str(e)}")
+        print(f"[ERROR] Тип ошибки: {type(e)}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
         return {
             'success': False,
             'error': str(e),
