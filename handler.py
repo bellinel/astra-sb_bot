@@ -177,10 +177,10 @@ async def report_yes(message: Message, state: FSMContext):
     workers = await get_all_workers()
     url = await write_to_sheet(workers)
     
-    # await message.answer(url.get("url"))
-    # await state.clear()
-    # await delete_all_workers()
-    # await cmd_start(message, state)
+    await message.answer(url.get("url"))
+    await state.clear()
+    await delete_all_workers()
+    await cmd_start(message, state)
 
 @workers_router.message(F.text == 'Нет')
 async def report_no(message: Message, state: FSMContext):

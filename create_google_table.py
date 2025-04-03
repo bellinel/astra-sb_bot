@@ -15,7 +15,7 @@ load_dotenv()
 
 SCOPES = ['https://www.googleapis.com/auth/spreadsheets']
 CREDENTIALS_FILE = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
-SPREADSHEET_ID = "1D4X1T3_aP4kea-m7r0EYb-IViZL0FfXfaReMPSutTho"  # ID вашей таблицы
+SPREADSHEET_ID = os.getenv('GOOGLE_SPREADSHEET_ID')  # Используем ID из переменных окружения
 SHEET_NAME = 'Лист1'  # Имя листа на русском
 RANGE_NAME = f'{SHEET_NAME}!A:H'  # Диапазон для записи (8 колонок)
 
@@ -76,8 +76,14 @@ def format_worker_data(worker_data: Union[List, Dict]) -> List:
 async def write_to_sheet(worker_data: Union[List, Dict]):
     """Запись данных в существующую таблицу"""
     try:
+        print(f"Начинаем запись в таблицу. ID таблицы: {SPREADSHEET_ID}")
+        print(f"Используем файл учетных данных: {CREDENTIALS_FILE}")
+        
         service = get_google_sheets_service()
+        print("Сервис Google Sheets успешно создан")
+        
         sheets = service.spreadsheets()
+        print("Получаем текущие данные таблицы...")
 
         # Получаем текущие данные таблицы
         result = sheets.values().get(
@@ -86,6 +92,7 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
         ).execute()
         
         values = result.get('values', [])
+        print(f"Получено {len(values)} строк из таблицы")
         
         # Если таблица пустая, добавляем заголовки
         if not values:
