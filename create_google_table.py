@@ -123,7 +123,7 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
 
         # Формируем ссылку на таблицу
         sheet_url = f'https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'
-        
+        print(f"Данные успешно записаны в таблицу. Ссылка: {sheet_url}")
         return {
             'success': True,
             'url': sheet_url,
@@ -131,11 +131,8 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
         }
 
     except Exception as e:
-        error_message = str(e)
-        print(f"Ошибка при записи в таблицу: {error_message}")
         return {
             'success': False,
-            'error': error_message,
-            'message': 'Произошла ошибка при записи в таблицу',
-            'url': None
+            'error': str(e),
+            'message': 'Произошла ошибка при записи в таблицу'
         }
