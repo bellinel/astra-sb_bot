@@ -6,6 +6,8 @@ from datetime import datetime
 from dotenv import load_dotenv
 from typing import Union, List, Dict
 import warnings
+from time_utils import get_current_time, format_datetime
+import pytz
 
 # Отключаем предупреждение о file_cache
 warnings.filterwarnings('ignore', message='file_cache is unavailable when using oauth2client >= 4.0.0')
@@ -36,8 +38,15 @@ def get_google_sheets_service():
 
 def format_worker_data(worker_data: Union[List, Dict]) -> List:
     """Форматирует данные работника в список для записи"""
-    current_date = datetime.now()
+    current_date = get_current_time()
     record_date = current_date.strftime("%Y-%m-%d")  # Дата записи (только дата без времени)
+    
+    def format_time_for_sheets(dt):
+        """Форматирует время для Google Sheets с учетом часового пояса"""
+        if dt.tzinfo is None:
+            dt = pytz.UTC.localize(dt)
+        moscow_tz = pytz.timezone('Europe/Moscow')
+        return dt.astimezone(moscow_tz).strftime("%Y-%m-%d %H:%M:%S")
     
     if hasattr(worker_data, '__table__'):  # Проверка на SQLAlchemy модель
         return [
@@ -45,9 +54,9 @@ def format_worker_data(worker_data: Union[List, Dict]) -> List:
             str(getattr(worker_data, 'user_id', '')),
             str(getattr(worker_data, 'user_name', '')),
             str(getattr(worker_data, 'start_address', '')),
-            getattr(worker_data, 'time_to_start_work', current_date).strftime("%Y-%m-%d %H:%M:%S"),
+            format_time_for_sheets(getattr(worker_data, 'time_to_start_work', current_date)),
             str(getattr(worker_data, 'left_address', '')),
-            getattr(worker_data, 'time_to_left_work', current_date).strftime("%Y-%m-%d %H:%M:%S"),
+            format_time_for_sheets(getattr(worker_data, 'time_to_left_work', current_date)),
             str(getattr(worker_data, 'work_time', ''))
         ]
     elif isinstance(worker_data, dict):
@@ -56,9 +65,9 @@ def format_worker_data(worker_data: Union[List, Dict]) -> List:
             str(worker_data.get('user_id', '')),
             str(worker_data.get('user_name', '')),
             str(worker_data.get('start_address', '')),
-            worker_data.get('time_to_start_work', current_date).strftime("%Y-%m-%d %H:%M:%S"),
+            format_time_for_sheets(worker_data.get('time_to_start_work', current_date)),
             str(worker_data.get('left_address', '')),
-            worker_data.get('time_to_left_work', current_date).strftime("%Y-%m-%d %H:%M:%S"),
+            format_time_for_sheets(worker_data.get('time_to_left_work', current_date)),
             str(worker_data.get('work_time', ''))
         ]
     else:
@@ -67,9 +76,9 @@ def format_worker_data(worker_data: Union[List, Dict]) -> List:
             str(worker_data[0]) if len(worker_data) > 0 else '',
             str(worker_data[1]) if len(worker_data) > 1 else '',
             str(worker_data[2]) if len(worker_data) > 2 else '',
-            (worker_data[3] if len(worker_data) > 3 else current_date).strftime("%Y-%m-%d %H:%M:%S"),
+            format_time_for_sheets(worker_data[3] if len(worker_data) > 3 else current_date),
             str(worker_data[4]) if len(worker_data) > 4 else '',
-            (worker_data[5] if len(worker_data) > 5 else current_date).strftime("%Y-%m-%d %H:%M:%S"),
+            format_time_for_sheets(worker_data[5] if len(worker_data) > 5 else current_date),
             str(worker_data[6]) if len(worker_data) > 6 else ''
         ]
 

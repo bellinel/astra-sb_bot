@@ -1,19 +1,20 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from sre_parse import State
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import os
 
 from dotenv import load_dotenv
 from geocoder import GeocodingService
-from orm import add_user_to_db, get_all_workers, delete_all_workers
+from orm import add_user_to_db, get_all_workers, delete_all_workers, Worker
 from create_google_table import write_to_sheet
 from text_messages import TextMessages
 from text_messages import TextButtons
 from keyboard import get_start_keyboard, get_work_left_keyboard, get_change_work_keyboard, get_new_day_keyboard, get_report_keyboard
+from time_utils import get_current_time, format_datetime
 workers_router = Router()
 
 # Загружаем переменные окружения
@@ -53,13 +54,13 @@ async def work_in(message: Message, state: FSMContext, bot: Bot):
         start_address = await geocoder.get_address_by_coordinates(latitude, longitude)
         start_address = start_address.get("full_address")
         
-        time_to_start_work = datetime.now()
+        time_to_start_work = get_current_time()
         
             
             
         
         # Форматируем время для пользователя
-        formatted_time = time_to_start_work.strftime("%d.%m.%Y %H:%M:%S")
+        formatted_time = format_datetime(time_to_start_work)
         
         await state.update_data(user_id=user_id, user_name=user_name, start_address=start_address, time_to_start_work=time_to_start_work)
         await message.answer(f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>", reply_markup=await get_work_left_keyboard(), parse_mode="HTML")
@@ -75,13 +76,13 @@ async def left_work(message: Message, state: FSMContext, bot: Bot):
 
         data = await state.get_data()
         left_address = data.get("start_address")
-        time_to_left_work = datetime.now()
-        formatted_time = time_to_left_work.strftime("%d.%m.%Y %H:%M:%S")
+        time_to_left_work = get_current_time()
+        formatted_time = format_datetime(time_to_left_work)
         
         
         
         await message.answer(f"Вы закончили работу на объекте по адресу: \n<i>{left_address}</i>\nВремя ухода: <i>{formatted_time}</i>", reply_markup=await get_change_work_keyboard(), parse_mode="HTML")
-        await bot.send_message(chat_id=GROUP_CHAT_ID, text=TextMessages.CHANGE_WORK_FOR_MENAGES.format(user_name=message.from_user.first_name, left_address=left_address, time_to_left_work=formatted_time))
+        await bot.send_message(chat_id=GROUP_CHAT_ID, text=TextMessages.LEFT_WORK_FOR_MENAGES.format(user_name=message.from_user.first_name, left_address=left_address, time_to_left_work=formatted_time))
         data.update(left_address=left_address, time_to_left_work=time_to_left_work)
         
         work_time = 'Переход на новый объект'
@@ -98,10 +99,10 @@ async def left_work(message: Message, state: FSMContext, bot: Bot):
         geocoder = GeocodingService()
         left_address = await geocoder.get_address_by_coordinates(latitude, longitude)
         left_address = left_address.get("full_address")
-        time_to_left_work = datetime.now()
+        time_to_left_work = get_current_time()
         
         # Форматируем время для пользователя
-        formatted_time = time_to_left_work.strftime("%d.%m.%Y %H:%M:%S")
+        formatted_time = format_datetime(time_to_left_work)
 
         await state.update_data(left_address=left_address, time_to_left_work=time_to_left_work)
         data = await state.get_data()
@@ -145,7 +146,7 @@ async def change_work(message: Message, state: FSMContext, bot: Bot):
         geocoder = GeocodingService()
         start_address = await geocoder.get_address_by_coordinates(latitude, longitude)
         start_address = start_address.get("full_address")
-        time_to_start_work = datetime.now()
+        time_to_start_work = get_current_time()
         if data.get("start_work_time"):
             start_work_time = data.get("start_work_time")
             work_time = "Переход на новый объект"
@@ -156,7 +157,7 @@ async def change_work(message: Message, state: FSMContext, bot: Bot):
             
         
         # Форматируем время для пользователя
-        formatted_time = time_to_start_work.strftime("%d.%m.%Y %H:%M:%S")
+        formatted_time = format_datetime(time_to_start_work)
         
         await state.update_data(user_id=user_id, user_name=user_name, start_address=start_address, time_to_start_work=time_to_start_work, start_work_time=start_work_time, work_time=work_time)
         await message.answer(f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>", reply_markup=await get_work_left_keyboard(), parse_mode="HTML")
@@ -187,6 +188,155 @@ async def report_no(message: Message, state: FSMContext):
     await state.clear()
     await cmd_start(message, state)
     return
+
+@workers_router.callback_query(F.data == "work_left")
+async def work_left(callback: CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        user_id = data.get("user_id")
+        user_name = data.get("user_name")
+        left_address = data.get("start_address")
+        time_to_left_work = get_current_time()
+        formatted_time = format_datetime(time_to_left_work)
+        
+        await callback.message.edit_text(
+            f"Вы закончили работу на объекте по адресу: \n<i>{left_address}</i>\nВремя ухода: <i>{formatted_time}</i>",
+            reply_markup=await get_change_work_keyboard(),
+            parse_mode="HTML"
+        )
+        
+        # Отправляем сообщение в групповой чат
+        group_chat_id = os.getenv('GROUP_CHAT_ID')
+        if group_chat_id:
+            await callback.message.bot.send_message(
+                group_chat_id,
+                TextMessages.LEFT_WORK_FOR_MENAGES.format(
+                    user_name=user_name,
+                    left_address=left_address,
+                    time_to_left_work=formatted_time
+                )
+            )
+        
+        # Сохраняем время в UTC+3
+        data.update(
+            left_address=left_address,
+            time_to_left_work=time_to_left_work
+        )
+        work_time = 'Переход на новый объект'
+        data.update(work_time=work_time)
+        await state.set_data(data)
+    except Exception as e:
+        await callback.message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
+        print(f"Error in work_left: {e}")
+
+@workers_router.callback_query(F.data == "end_work")
+async def end_work(callback: CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        left_address = data.get("start_address")
+        time_to_left_work = get_current_time()
+        formatted_time = format_datetime(time_to_left_work)
+        
+        await state.update_data(left_address=left_address, time_to_left_work=time_to_left_work)
+        time_to_start_work = data.get("time_to_start_work")
+        work_time = time_to_left_work - time_to_start_work
+        
+        if data.get("start_work_time"):
+            work_time = time_to_left_work - data.get("start_work_time")
+            data.pop("start_work_time")
+            data.update(work_time=work_time)
+        
+        hours, remainder = divmod(work_time.total_seconds(), 3600)
+        minutes, seconds = divmod(remainder, 60)
+        work_time_str = f"{int(hours)} часов {int(minutes)} минут {int(seconds)} секунд"
+        
+        data.update(work_time = work_time_str)
+        await state.set_data(data)
+        
+        await callback.message.edit_text(f"Вы закончили на работу по адресу: \n<i>{left_address}</i>\nВремя ухода: <i>{formatted_time}</i>", parse_mode="HTML")
+        
+        # Отправляем сообщение в групповой чат
+        group_chat_id = os.getenv('GROUP_CHAT_ID')
+        if group_chat_id:
+            await callback.message.bot.send_message(group_chat_id, TextMessages.LEFT_WORK_FOR_MENAGES.format(
+                user_name=callback.from_user.first_name, left_address=left_address, time_to_left_work=formatted_time, work_time=work_time_str), parse_mode="HTML")
+        
+        await callback.message.answer(TextMessages.WORK_TIME.format(work_time=work_time_str))
+    except Exception as e:
+        await callback.message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
+        print(f"Error in end_work: {e}")
+
+@workers_router.callback_query(F.data == "change_work")
+async def change_work(callback: CallbackQuery, state: FSMContext):
+    try:
+        data = await state.get_data()
+        user_id = data.get("user_id")
+        user_name = data.get("user_name")
+        time_to_start_work = get_current_time()
+        
+        if data.get("start_work_time"):
+            start_work_time = data.get("start_work_time")
+            work_time = "Переход на новый объект"
+            data.update(work_time=work_time)
+        else:
+            start_work_time = data.get("time_to_start_work")
+            work_time = "Переход на новый объект"
+            data.update(work_time=work_time)
+        
+        formatted_time = format_datetime(time_to_start_work)
+        
+        await state.update_data(user_id=user_id, user_name=user_name, start_address=start_address, time_to_start_work=time_to_start_work, start_work_time=start_work_time, work_time=work_time)
+        await callback.message.edit_text(f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>", reply_markup=await get_work_left_keyboard(), parse_mode="HTML")
+        
+        # Отправляем сообщение в групповой чат
+        group_chat_id = os.getenv('GROUP_CHAT_ID')
+        if group_chat_id:
+            await callback.message.bot.send_message(group_chat_id, TextMessages.NEW_WORK_FOR_MENAGES.format(
+                user_name=callback.from_user.first_name, new_address=start_address, time_to_new_work=formatted_time))
+    except Exception as e:
+        await callback.message.answer("Произошла ошибка. Пожалуйста, попробуйте еще раз.")
+        print(f"Error in change_work: {e}")
+
+@workers_router.message(F.location)
+async def handle_location(message: Message, state: FSMContext):
+    try:
+        user_id = message.from_user.id
+        user_name = message.from_user.first_name
+        latitude = message.location.latitude
+        longitude = message.location.longitude
+        
+        start_address = await get_address_from_coordinates(latitude, longitude)
+        time_to_start_work = get_current_time()
+        formatted_time = format_datetime(time_to_start_work)
+        
+        # Сохраняем время в UTC+3
+        await state.update_data(
+            user_id=user_id,
+            user_name=user_name,
+            start_address=start_address,
+            time_to_start_work=time_to_start_work
+        )
+        
+        await message.answer(
+            f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>",
+            reply_markup=await get_work_left_keyboard(),
+            parse_mode="HTML"
+        )
+        
+        # Отправляем сообщение в групповой чат
+        group_chat_id = os.getenv('GROUP_CHAT_ID')
+        if group_chat_id:
+            await message.bot.send_message(
+                group_chat_id,
+                TextMessages.START_WORK_FOR_MENAGES.format(
+                    user_name=user_name,
+                    start_address=start_address,
+                    time_to_start_work=formatted_time
+                )
+            )
+    except Exception as e:
+        await message.answer("Произошла ошибка при обработке местоположения. Пожалуйста, попробуйте еще раз.")
+        print(f"Error in handle_location: {e}")
 
 
 
