@@ -131,8 +131,11 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
         }
 
     except Exception as e:
+        error_message = str(e)
+        print(f"Ошибка при записи в таблицу: {error_message}")
         return {
             'success': False,
-            'error': str(e),
-            'message': 'Произошла ошибка при записи в таблицу'
+            'error': error_message,
+            'message': 'Произошла ошибка при записи в таблицу',
+            'url': None
         }

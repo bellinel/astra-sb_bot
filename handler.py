@@ -175,9 +175,13 @@ async def report(message: Message, state: FSMContext):
 @workers_router.message(F.text == 'Да')
 async def report_yes(message: Message, state: FSMContext):
     workers = await get_all_workers()
-    url = await write_to_sheet(workers)
+    result = await write_to_sheet(workers)
     
-    await message.answer(url.get("url"))
+    if result.get("success"):
+        await message.answer(f"Отчет успешно создан: {result.get('url')}")
+    else:
+        await message.answer(f"Ошибка при создании отчета: {result.get('message')}")
+    
     await state.clear()
     await delete_all_workers()
     await cmd_start(message, state)
