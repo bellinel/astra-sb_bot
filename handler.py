@@ -65,9 +65,12 @@ async def work_in(message: Message, state: FSMContext, bot: Bot):
         
         await state.update_data(user_id=user_id, user_name=user_name, start_address=start_address, time_to_start_work=time_to_start_work)
         await message.answer(f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>", reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
+        
+        await bot.send_message(chat_id=GROUP_CHAT_ID, text=TextMessages.START_WORK_FOR_MENAGES.format(user_name=user_name, start_address=start_address, time_to_start_work=formatted_time))
+
         await asyncio.sleep(300)
         await message.answer(TextMessages.READ_ME, reply_markup=await get_work_left_keyboard())
-        await bot.send_message(chat_id=GROUP_CHAT_ID, text=TextMessages.START_WORK_FOR_MENAGES.format(user_name=user_name, start_address=start_address, time_to_start_work=formatted_time))
+        
         
         await state.set_state(Worker.left_work)
         
