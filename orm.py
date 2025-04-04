@@ -5,6 +5,21 @@ from datetime import datetime
 async def add_user_to_db(user_data: dict) -> None:
     """Добавляет нового пользователя в базу данных"""
     db = Database()
+    # Проверяем, существует ли уже запись с такими данными
+    try:
+        async with db.session_factory() as check_session:
+            existing_record = await check_session.execute(
+                select(Worker).where(
+                    Worker.user_id == user_data["user_id"],
+                    Worker.time_to_start_work == user_data["time_to_start_work"].replace(microsecond=0),
+                    Worker.time_to_left_work == user_data["time_to_left_work"].replace(microsecond=0)
+                )
+            )
+            if existing_record.scalar_one_or_none():
+                print(f"Запись для пользователя {user_data['user_name']} с такими временными метками уже существует")
+                return
+    except Exception as check_error:
+        print(f"Ошибка при проверке существующих записей: {check_error}")
     try:
         async with db.session_factory() as session:
             start_time = user_data["time_to_start_work"]

@@ -1,8 +1,9 @@
+import asyncio
 from datetime import datetime, timezone
 from sre_parse import State
 from aiogram import Router, F, Bot
 from aiogram.filters import Command
-from aiogram.types import Message
+from aiogram.types import Message, ReplyKeyboardRemove
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 import os
@@ -63,14 +64,19 @@ async def work_in(message: Message, state: FSMContext, bot: Bot):
         formatted_time = time_to_start_work.strftime("%d.%m.%Y %H:%M:%S")
         
         await state.update_data(user_id=user_id, user_name=user_name, start_address=start_address, time_to_start_work=time_to_start_work)
-        await message.answer(f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>", reply_markup=await get_work_left_keyboard(), parse_mode="HTML")
+        await message.answer(f"Вы пришли на объект по адресу: \n<i>{start_address}</i>\nВремя прибытия: <i>{formatted_time}</i>", reply_markup=ReplyKeyboardRemove(), parse_mode="HTML")
+        await asyncio.sleep(300)
+        await message.answer(TextMessages.READ_ME, reply_markup=await get_work_left_keyboard())
         await bot.send_message(chat_id=GROUP_CHAT_ID, text=TextMessages.START_WORK_FOR_MENAGES.format(user_name=user_name, start_address=start_address, time_to_start_work=formatted_time))
+        
         await state.set_state(Worker.left_work)
         
 
 
 @workers_router.message(Worker.left_work)
 async def left_work(message: Message, state: FSMContext, bot: Bot):
+
+    
     
     if message.text == TextButtons.CHANGE_WORK:
 
