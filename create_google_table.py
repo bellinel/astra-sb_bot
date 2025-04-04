@@ -73,6 +73,31 @@ def format_worker_data(worker_data: Union[List, Dict]) -> List:
             str(worker_data[6]) if len(worker_data) > 6 else ''
         ]
 
+def is_duplicate_row(new_row: List, existing_rows: List[List]) -> bool:
+    """
+    Проверяет, существуют ли уже такие данные в таблице.
+    
+    Args:
+        new_row: Новая строка данных для проверки
+        existing_rows: Существующие строки в таблице
+        
+    Returns:
+        bool: True, если строка уже существует, False в противном случае
+    """
+    # Пропускаем заголовок таблицы (первая строка)
+    if len(existing_rows) <= 1:
+        return False
+        
+    # Сравниваем новую строку с каждой существующей строкой
+    for row in existing_rows[1:]:  # Начинаем с индекса 1, пропуская заголовок
+        # Проверяем длину строки для избежания ошибок индексирования
+        if len(row) == len(new_row):
+            # Проверяем все элементы строки на совпадение
+            if all(str(row[i]) == str(new_row[i]) for i in range(len(row))):
+                return True
+    
+    return False
+
 async def write_to_sheet(worker_data: Union[List, Dict]):
     """Запись данных в существующую таблицу"""
     try:
@@ -108,34 +133,64 @@ async def write_to_sheet(worker_data: Union[List, Dict]):
                 valueInputOption='RAW',
                 body={'values': headers}
             ).execute()
+            values = headers  # Обновляем values, чтобы включить заголовки
 
         # Форматируем данные работников
         if isinstance(worker_data, list) and all(hasattr(w, '__table__') for w in worker_data):
             # Если это список SQLAlchemy моделей
-            row_data = [format_worker_data(worker) for worker in worker_data]
+            formatted_rows = [format_worker_data(worker) for worker in worker_data]
         else:
             # Если это одиночный объект
-            row_data = [format_worker_data(worker_data)]
-
-        # Определяем следующую пустую строку
-        next_row = len(values) + 1 if values else 2
+            formatted_rows = [format_worker_data(worker_data)]
         
-        # Записываем данные
-        result = sheets.values().update(
-            spreadsheetId=SPREADSHEET_ID,
-            range=f'{SHEET_NAME}!A{next_row}',
-            valueInputOption='RAW',
-            body={'values': row_data}
-        ).execute()
+        # Фильтруем дубликаты
+        row_data = []
+        duplicates_found = 0
+        
+        for row in formatted_rows:
+            if is_duplicate_row(row, values):
+                duplicates_found += 1
+                print(f"Найден дубликат данных - пропускаем запись: {row}")
+            else:
+                row_data.append(row)
+        
+        # Если все строки - дубликаты, возвращаем сообщение
+        if duplicates_found > 0 and not row_data:
+            print("Все данные уже существуют в таблице, новые записи не добавлены")
+            return {
+                'success': True,
+                'url': f'https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}',
+                'message': 'Все данные уже существуют в таблице, новые записи не добавлены'
+            }
+        
+        # Если остались строки для записи
+        if row_data:
+            # Определяем следующую пустую строку
+            next_row = len(values) + 1 if values else 2
+            
+            # Записываем данные
+            result = sheets.values().update(
+                spreadsheetId=SPREADSHEET_ID,
+                range=f'{SHEET_NAME}!A{next_row}',
+                valueInputOption='RAW',
+                body={'values': row_data}
+            ).execute()
 
-        # Формируем ссылку на таблицу
-        sheet_url = f'https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'
-        print(f"Данные успешно записаны в таблицу. Ссылка: {sheet_url}")
-        return {
-            'success': True,
-            'url': sheet_url,
-            'message': f'Данные успешно записаны в таблицу. Ссылка: {sheet_url}'
-        }
+            # Формируем сообщение
+            message = f"Данные успешно записаны в таблицу."
+            if duplicates_found > 0:
+                message += f" Пропущено дубликатов: {duplicates_found}."
+            
+            # Формируем ссылку на таблицу
+            sheet_url = f'https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}'
+            print(f"{message} Ссылка: {sheet_url}")
+            
+            return {
+                'success': True,
+                'url': sheet_url,
+                'message': message,
+                'duplicates_skipped': duplicates_found
+            }
 
     except Exception as e:
         return {
